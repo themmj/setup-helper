@@ -4,20 +4,16 @@
 #   cli configuration
 DIR=
 PLATFORM=
-PROFILE=
 DEBUG=
 #   parsing utilities
 TMPDIR=$(mktemp -d -t sh-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX)
 platformfile="platforms"
-profilefile="profiles"
 setupfile="setup"
 #   platform information
-platformname=
-defaultinstallcmd=
-#   profile information
+defaultinstallcmds=()
+#   default random
 randomdefault=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
-chosendirs=
-chosenapps=
+workingdir=$(pwd)
 
 # log
 padding="    "
@@ -63,8 +59,6 @@ print_help() {
     echo "      (required) config files are contained in the dir folder"
     echo "  --platform=ARG"
     echo "      (required) parses config for platform ARG"
-    echo "  --profile=ARG"
-    echo "      parses config with profile ARG"
     echo "  --debug=x"
     echo "      enable debug logs"
 }
@@ -81,19 +75,19 @@ set_script_file_handle() {
 
 write_to_script_file() {
     # replace subs with actual values
-    tmp="${1//$bssub/\\}"
-    tmp="${tmp//$bsdqsub/\"}"
+    ctbw="${1//$bssub/\\}"
+    ctbw="${ctbw//$bsdqsub/\"}"
     # if override flag is provided
     if [ $# -eq 2 ]; then
-        echo "$tmp" > "$scriptfilehandle"
+        echo "$ctbw" > "$scriptfilehandle"
     else
-        echo "$tmp" >> "$scriptfilehandle"
+        echo "$ctbw" >> "$scriptfilehandle"
     fi
 }
 
 configfilehandle=
 set_config_file_handle() {
-    configfilehandle="$DIR/$1.conf"
+    configfilehandle="$workingdir/$DIR/$1.conf"
 }
 
 configexists=
@@ -126,26 +120,94 @@ process_config_file() {
     IFS=$OIFS
 }
 
-# state transition logic
-qcurr=
-qfin=
+# path logic
+isinhome=
+isinroot=
+pathcache=
+check_path() {
+    incrdepth
+    isinhome=0
+    isinroot=0
+    case "$1" in
+        $HOME/*)
+            isinhome=1
+            pathcache=$1
+            ;;
+        \~/*)
+            isinhome=1
+            pathcache="$HOME/${1##\~/}"
+            ;;
+        /*)
+            isinroot=1
+            pathcache=$1
+            ;;
+        *)
+            ;;
+    esac
+    if [ $isinhome -eq 1 ] || [ $isinroot -eq 1 ]; then
+        debug "$1 was normalized to $pathcache"
+    fi
+    debug "isinhome: $isinhome isinroot: $isinroot for $1"
+    decrdepth
+}
 
+dirstack=
+currdir=
+pushdir() {
+    currdir=${1%/}
+    if [ $# -eq 2 ]; then
+        dirstack="$currdir "
+    else
+        dirstack="$currdir $dirstack"
+    fi
+    write_to_script_file "mkdir -p $currdir"
+    write_to_script_file "cd $currdir"
+}
+popdir() {
+    dirstack=${dirstack#* }
+    currdir=${dirstack%% *}
+    write_to_script_file "cd $currdir"
+}
+
+# keywords
+kwapps="apps"
+kwcmd="cmd"
+kwenv="env"
+kwfiles="files"
+kwpackages="packages"
+kwpkginstall="pkginstall"
+kwrepos="repos"
+kwsubdirs="subdirs"
+
+# line parsing
 linenumber=
 istag=
+isroottag=
 tagname=
 isvalue=
 rowvalues=
 iskeyword=
 currkeyword=
+currplatform=
+currenvfile=
 parse_line() {
     debug "parse line $linenumber"
     incrdepth
     OIFS=$IFS
     istag=0
+    iskeyword=0
     isvalue=0
     case $1 in
+        \[*\])
+            istag=1
+            isroottag=1
+            tmp="${1#*\[}"
+            tagname="${tmp%\]*}"
+            debug "roottagname $tagname"
+            ;;
         *\[*\])
             istag=1
+            isroottag=0
             tmp="${1#*\[}"
             tagname="${tmp%\]*}"
             debug "tagname $tagname"
@@ -175,6 +237,9 @@ parse_line() {
             currkeyword="${tmp%\:*}"
             debug "found keyword $currkeyword"
             ;;
+        *.)
+            popdir
+            ;;
         "")
             ;;
         *)
@@ -187,60 +252,134 @@ parse_line() {
     decrdepth
 }
 
+process_tag() {
+    debug "processing tag $tagname roottag: $isroottag"
+    check_path "$tagname"
+    if [ $isroottag -eq 1 ]; then
+        if [ $isinroot -eq 1 ] || [ $isinhome -eq 1 ]; then
+            write_to_script_file "echo \"[INFO ] setting up directory $pathcache\""
+            pushdir "$pathcache" "x"
+        else
+            info "found platform $tagname"
+            currplatform="$tagname"
+        fi
+    else
+        case "$currkeyword" in
+            "$kwsubdirs")
+                pushdir "$currdir/$tagname"
+                ;;
+            "$kwapps")
+                write_to_script_file "echo \"[INFO ] installing app $tagname\""
+                ;;
+            *)
+                error "unexpected tag $tagname on line $linenumber"
+                ;;
+        esac        
+    fi
+}
+
+process_keyword(){
+    debug "processing keyword $currkeyword"
+    case "$currkeyword" in
+        "$kwapps")
+            ;;
+        "$kwcmd")
+            ;;
+        "$kwenv")
+            currenvfile="$currdir/.env"
+            write_to_script_file "echo \"\" > \"$currenvfile\""
+            ;;
+        "$kwfiles")
+            ;;
+        "$kwpackages")
+            ;;
+        "$kwpkginstall")
+            ;;
+        "$kwrepos")
+            ;;
+        "$kwsubdirs")
+            ;;
+        *)
+            error "unknown keyword $currkeyword on line $linenumber"
+            exit -1
+            ;;
+    esac
+}
+
+process_rowvalues(){
+    arg0="${rowvalues[0]}"
+    arg1="${rowvalues[1]}"
+    arg2="${rowvalues[2]}"
+    case "$currkeyword" in
+        "$kwapps")
+            error "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
+            exit -1
+            ;;
+        "$kwcmd")
+            if [ "$arg0" == "$PLATFORM" ]; then
+                write_to_script_file "$arg1"
+            fi
+            ;;
+        "$kwenv")
+            info "env vals ${rowvalues[@]}"
+            if [ ${#rowvalues[@]} -eq 3 ]; then
+                write_to_script_file "echo \"case \\\":\${$arg0}:\\\" in\" >> $currenvfile"
+                write_to_script_file "echo \"*:$arg1:*)\" >> $currenvfile"
+                write_to_script_file "echo \";;\" >> $currenvfile"
+                write_to_script_file "echo \"*)\" >> $currenvfile"
+                if [ ${rowvalues[2]} == "append" ]; then
+                    write_to_script_file "echo \"export $arg0=\\\"\$$arg0:$arg1\\\"\" >> $currenvfile"
+                else
+                    write_to_script_file "echo \"export $arg0=\\\"\$$arg1:$arg0\\\"\" >> $currenvfile"
+                fi
+                write_to_script_file "echo \"esac\" >> $currenvfile"
+            else
+                write_to_script_file "echo \"export $arg0=$arg1\" >> $currenvfile"
+            fi
+            ;;
+        "$kwfiles")
+            case "$arg1" in
+                "copy")
+                    write_to_script_file "cp -r $workingdir/$arg0 $currdir"
+                    ;;
+                "link")
+                    write_to_script_file "ln -f $workingdir/$arg0 $currdir"
+                    ;;
+                *)
+                    error "invalid file option $arg1 on line $linenumber"
+                    exit -1
+            esac
+            ;;
+        "$kwpackages")
+            write_to_script_file "${defaultinstallcmds[$PLATFORM]} $arg1"
+            ;;
+        "$kwpkginstall")
+            defaultinstallcmds["$currplatform"]="$arg0"
+            ;;
+        "$kwrepos")
+            write_to_script_file "git clone $arg0 $arg1"
+            ;;
+        "$kwsubdirs")
+            error "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
+            exit -1
+            ;;
+        *)
+            error "unknown keyword $currkeyword on line $linenumber"
+            exit -1
+            ;;
+    esac
+}
+
 process_line_data() {
     debug "process line $linenumber"
     incrdepth
     if [ $istag -eq 1 ]; then
-        case $qcurr in
-            *)
-                debug "default case for tag $tagname"
-                ;;
-        esac
+        process_tag
     elif [ $iskeyword -eq 1 ]; then
-        debug "keyword for state transition $currkeyword"
+        process_keyword
     elif [ $isvalue -eq 1 ]; then
-        for value in "${rowvalues[@]}"; do
-            case $qcurr in
-                *)
-                    debug "default case for value $value"
-                    ;;
-            esac
-        done
+        process_rowvalues
     fi
-    decrdepth
-}
-
-# path logic
-isinhome=
-isinroot=
-pathcache=
-check_path() {
-    incrdepth
-    isinhome=0
-    isinroot=0
-    case "$1" in
-        $HOME/*)
-            isinhome=1
-            pathcache=$1
-            ;;
-        \~/*)
-            isinhome=1
-            pathcache="$HOME/${1##\~/}"
-            ;;
-        /*)
-            isinroot=1
-            pathcache=$1
-            ;;
-        *)
-            ;;
-    esac
-    if [ $isinhome -eq 0 ] && [ $isinroot -eq 0 ]; then
-        error "invalid path $1"
-        info "please use absolute or home-relative paths"
-        exit -1
-    fi
-    debug "isinhome: $isinhome isinroot: $isinroot for $1"
-    debug "$1 was normalized to $pathcache"
     decrdepth
 }
 
@@ -253,24 +392,13 @@ parse_platforms() {
     decrdepth
 }
 
-parse_profiles() {
-    incrdepth
-    info "parsing profiles"
-    set_config_file_handle $profilefile
-    check_config_file
-
-    if [ $configexists -eq 1 ]; then
-        process_config_file
-    fi
-    decrdepth
-}
-
 parse_setup() {
     incrdepth
     info "parsing directories"
     set_config_file_handle $setupfile
     check_config_file "x"
     set_script_file_handle $setupfile
+    write_to_script_file "#!/bin/bash" "x"
     process_config_file
     decrdepth
 }
@@ -290,9 +418,6 @@ for arg in "$@"; do
         "--debug")
             DEBUG="x"
             ;;
-        "--profile")
-            PROFILE="${split[1]}"
-            ;;
         "--platform")
             PLATFORM="${split[1]}"
             ;;
@@ -306,12 +431,6 @@ done
 
 debug "debug mode enabled"
 info "parsing for platform $PLATFORM"
-if [ ${PROFILE:+1} ]; then
-    info "using profile $PROFILE"
-else
-    PROFILE=randomdefault
-    debug "using default profile $randomdefault"
-fi
 info "searching for config in $DIR"
 info "writing temporary scripts to $TMPDIR"
 
@@ -319,7 +438,6 @@ info "writing temporary scripts to $TMPDIR"
 info "parse config start"
 
 parse_platforms
-parse_profiles
 parse_setup
 
 info "parse config end"
