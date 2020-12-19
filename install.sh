@@ -45,6 +45,11 @@ error() {
     log "ERROR" "$@"
 }
 
+fatal() {
+    log "FATAL" "$@"
+    exit -1
+}
+
 debug() {
     if [ ${DEBUG:+1} ]; then
         log "DEBUG" "$@"
@@ -96,8 +101,7 @@ check_config_file() {
     if [ ! -f "$configfilehandle" ]; then
         # if fatal flag is set
         if [ $# -eq 1 ]; then
-            error "missing config file $configfilehandle"
-            exit -1
+            fatal  "missing config file $configfilehandle"
         else
             info "file not found but not required $configfilehandle"
             configexists=0
@@ -243,8 +247,7 @@ parse_line() {
         "")
             ;;
         *)
-            error "unrecognized pattern on line $linenumber: $1"
-            exit -1
+            fatal  "unrecognized pattern on line $linenumber: $1"
             ;;
     esac
     linenumber=$((linenumber + 1))
@@ -300,8 +303,7 @@ process_keyword(){
         "$kwsubdirs")
             ;;
         *)
-            error "unknown keyword $currkeyword on line $linenumber"
-            exit -1
+            fatal "unknown keyword $currkeyword on line $linenumber"
             ;;
     esac
 }
@@ -312,8 +314,7 @@ process_rowvalues(){
     arg2="${rowvalues[2]}"
     case "$currkeyword" in
         "$kwapps")
-            error "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
-            exit -1
+            fatal "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
             ;;
         "$kwcmd")
             if [ "$arg0" == "$PLATFORM" ]; then
@@ -321,17 +322,22 @@ process_rowvalues(){
             fi
             ;;
         "$kwenv")
-            info "env vals ${rowvalues[@]}"
             if [ ${#rowvalues[@]} -eq 3 ]; then
-                write_to_script_file "echo \"case \\\":\${$arg0}:\\\" in\" >> $currenvfile"
+                write_to_script_file "echo \"case \\\":\\\${$arg0}:\\\" in\" >> $currenvfile"
                 write_to_script_file "echo \"*:$arg1:*)\" >> $currenvfile"
                 write_to_script_file "echo \";;\" >> $currenvfile"
                 write_to_script_file "echo \"*)\" >> $currenvfile"
-                if [ ${rowvalues[2]} == "append" ]; then
-                    write_to_script_file "echo \"export $arg0=\\\"\$$arg0:$arg1\\\"\" >> $currenvfile"
-                else
-                    write_to_script_file "echo \"export $arg0=\\\"\$$arg1:$arg0\\\"\" >> $currenvfile"
-                fi
+                case "$arg2" in
+                    "append")
+                        write_to_script_file "echo \"export $arg0=\\\"\\\$$arg0:$arg1\\\"\" >> $currenvfile"
+                        ;;
+                    "prepend")
+                        write_to_script_file "echo \"export $arg0=\\\"\\\$$arg1:$arg0\\\"\" >> $currenvfile"
+                        ;;
+                    *)
+                        fatal "invalid env option $arg2 on line $linenumber"
+                        ;;
+                esac
                 write_to_script_file "echo \"esac\" >> $currenvfile"
             else
                 write_to_script_file "echo \"export $arg0=$arg1\" >> $currenvfile"
@@ -346,9 +352,8 @@ process_rowvalues(){
                     write_to_script_file "ln -f $workingdir/$arg0 $currdir"
                     ;;
                 *)
-                    error "invalid file option $arg1 on line $linenumber"
-                    exit -1
-            esac
+                    fatal "invalid file option $arg1 on line $linenumber"
+                esac
             ;;
         "$kwpackages")
             write_to_script_file "${defaultinstallcmds[$PLATFORM]} $arg1"
@@ -360,12 +365,10 @@ process_rowvalues(){
             write_to_script_file "git clone $arg0 $arg1"
             ;;
         "$kwsubdirs")
-            error "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
-            exit -1
+            fatal "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
             ;;
         *)
-            error "unknown keyword $currkeyword on line $linenumber"
-            exit -1
+            fatal "unknown keyword $currkeyword on line $linenumber"
             ;;
     esac
 }
