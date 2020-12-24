@@ -12,7 +12,7 @@ setupfile="setup"
 #   platform information
 defaultinstallcmds=()
 #   default random
-randomdefault=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
+randomdefault=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
 workingdir=$(pwd)
 
 # log
