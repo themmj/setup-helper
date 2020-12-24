@@ -269,7 +269,11 @@ process_tag() {
     else
         case "$currkeyword" in
             "$kwsubdirs")
+                parentenvfile="$currdir/.env"
                 pushdir "$currdir/$tagname"
+                write_to_script_file "echo \"if [ -f $currdir/.env ]; then\" >> $parentenvfile"
+                write_to_script_file "echo \"source $currdir/.env\" >> $parentenvfile"
+                write_to_script_file "echo \"fi\" >> $parentenvfile"
                 ;;
             "$kwapps")
                 write_to_script_file "echo \"[INFO ] installing app $tagname\""
