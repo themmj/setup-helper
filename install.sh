@@ -336,7 +336,7 @@ process_rowvalues(){
                         write_to_script_file "echo \"export $arg0=\\\"\\\$$arg0:$arg1\\\"\" >> $currenvfile"
                         ;;
                     "prepend")
-                        write_to_script_file "echo \"export $arg0=\\\"\\\$$arg1:$arg0\\\"\" >> $currenvfile"
+                        write_to_script_file "echo \"export $arg0=\\\"$arg1:\\\$$arg0\\\"\" >> $currenvfile"
                         ;;
                     *)
                         fatal "invalid env option $arg2 on line $linenumber"
