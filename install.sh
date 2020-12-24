@@ -369,7 +369,7 @@ process_rowvalues(){
                 gitname="${arg0#*/}"
                 repodir="${gitname%.git}"
             fi
-            if [ -d "$currdir/$repodir" ]
+            if [ -d "$currdir/$repodir" ]; then
                 info "repo $repodir already cloned"
             else
                 write_to_script_file "git clone $arg0 $arg1"
