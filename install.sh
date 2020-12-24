@@ -317,7 +317,7 @@ process_rowvalues(){
             fatal "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
             ;;
         "$kwcmd")
-            if [ "$arg0" == "$PLATFORM" ]; then
+            if [ "$arg0" == "$PLATFORM" ] || [ "$arg0" == "all" ]; then
                 write_to_script_file "$arg1"
             fi
             ;;
@@ -356,13 +356,24 @@ process_rowvalues(){
                 esac
             ;;
         "$kwpackages")
-            write_to_script_file "${defaultinstallcmds[$PLATFORM]} $arg1"
+            if [ "$arg0" == "$PLATFORM" ] || [ "$arg0" == "all" ]; then
+                write_to_script_file "${defaultinstallcmds[$PLATFORM]} $arg1"
+            fi
             ;;
         "$kwpkginstall")
             defaultinstallcmds["$currplatform"]="$arg0"
             ;;
         "$kwrepos")
-            write_to_script_file "git clone $arg0 $arg1"
+            repodir="$arg1"
+            if [ "$repodir" == "" ]; then
+                gitname="${arg0#*/}"
+                repodir="${gitname%.git}"
+            fi
+            if [ -d "$currdir/$repodir" ]
+                info "repo $repodir already cloned"
+            else
+                write_to_script_file "git clone $arg0 $arg1"
+            fi
             ;;
         "$kwsubdirs")
             fatal "invalid use of direct arguments under keyword $currkeyword on line $linenumber"
@@ -392,6 +403,9 @@ parse_platforms() {
     set_config_file_handle $platformfile
     check_config_file "x"
     process_config_file
+    if [ "${defaultinstallcmds[$PLATFORM]}" == "" ]; then
+        fatal "no default install command for chosen platform provided"
+    fi
     decrdepth
 }
 
