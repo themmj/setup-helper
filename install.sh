@@ -175,7 +175,7 @@ popdir() {
 
 # keywords
 kwapps="apps"
-kwcmd="cmd"
+kwcmd="cmds"
 kwenv="env"
 kwfiles="files"
 kwpackages="packages"
