@@ -194,6 +194,55 @@ iskeyword=
 currkeyword=
 currplatform=
 currenvfile=
+
+# context logic
+coroot="root"
+codir="dir"
+coapp="app"
+coplatform="platform"
+costack="$coroot "
+currco="$coroot"
+
+pushco() {
+    currco="$1"
+    costack="$currco $costack"
+    case "$currco" in
+        "$coroot")
+            ;;
+        "$codir")
+            ;;
+        "$coapp")
+            ;;
+        "$coplatform")
+            ;;
+        *)
+            fatal "unknow context $currco (this should not happen)"
+            ;;
+    esac
+}
+
+popco() {
+    case "$currco" in
+        "$coroot")
+            currkeyword=""
+            ;;
+        "$codir")
+            popdir
+            currkeyword="$kwsubdirs"
+            ;;
+        "$coapp")
+            currkeyword="$kwapps"
+            ;;
+        "$coplatform")
+            ;;
+        *)
+            fatal "unknow context $currco (this should not happen)"
+            ;;
+    esac
+    costack=${costack#* }
+    currco=${costack%% *}
+}
+
 parse_line() {
     debug "parse line $linenumber"
     incrdepth
@@ -242,7 +291,7 @@ parse_line() {
             debug "found keyword $currkeyword"
             ;;
         *.)
-            popdir
+            popco
             ;;
         "")
             ;;
@@ -259,27 +308,37 @@ process_tag() {
     debug "processing tag $tagname roottag: $isroottag"
     check_path "$tagname"
     if [ $isroottag -eq 1 ]; then
+        if [ "$currco" != "$coroot" ]; then
+            fatal "found root tag outside of root context, perhaps a . is missing"
+        fi
         if [ $isinroot -eq 1 ] || [ $isinhome -eq 1 ]; then
+            info "parsing directory $pathcache"
             write_to_script_file "echo \"[INFO ] setting up directory $pathcache\""
             pushdir "$pathcache" "x"
+            pushco "$codir"
         else
-            info "found platform $tagname"
+            info "parsing platform $tagname"
             currplatform="$tagname"
+            pushco "$coplatform"
         fi
     else
         case "$currkeyword" in
             "$kwsubdirs")
+                info "parsing subdirectory $tagname"
                 parentenvfile="$currdir/.env"
                 pushdir "$currdir/$tagname"
                 write_to_script_file "echo \"if [ -f $currdir/.env ]; then\" >> $parentenvfile"
                 write_to_script_file "echo \"source $currdir/.env\" >> $parentenvfile"
                 write_to_script_file "echo \"fi\" >> $parentenvfile"
+                pushco "$codir"
                 ;;
             "$kwapps")
+                info "parsing app $tagname"
                 write_to_script_file "echo \"[INFO ] installing app $tagname\""
+                pushco "$coapp"
                 ;;
             *)
-                error "unexpected tag $tagname on line $linenumber"
+                fatal "unexpected tag $tagname on line $linenumber"
                 ;;
         esac        
     fi
@@ -289,22 +348,46 @@ process_keyword(){
     debug "processing keyword $currkeyword"
     case "$currkeyword" in
         "$kwapps")
+            if [ "$currco" != "$codir" ]; then
+                fatal "cannot use keyword $currkeyword outside a directory context"
+            fi
             ;;
         "$kwcmd")
+            if [ "$currco" != "$coapp" ]; then
+                fatal "cannot use keyword $currkeyword outside an app context"
+            fi
             ;;
         "$kwenv")
+            if [ "$currco" != "$codir" ]; then
+                fatal "cannot use keyword $currkeyword outside a directory context"
+            fi
             currenvfile="$currdir/.env"
             write_to_script_file "echo \"\" > \"$currenvfile\""
             ;;
         "$kwfiles")
+            if [ "$currco" != "$codir" ]; then
+                fatal "cannot use keyword $currkeyword outside a directory context"
+            fi
             ;;
         "$kwpackages")
+            if [ "$currco" != "$coapp" ]; then
+                fatal "cannot use keyword $currkeyword outside an app context"
+            fi
             ;;
         "$kwpkginstall")
+            if [ "$currco" != "$coplatform" ]; then
+                fatal "cannot use keyword $currkeyword outside a platform context"
+            fi
             ;;
         "$kwrepos")
+            if [ "$currco" != "$codir" ]; then
+                fatal "cannot use keyword $currkeyword outside a directory context"
+            fi
             ;;
         "$kwsubdirs")
+            if [ "$currco" != "$codir" ]; then
+                fatal "cannot use keyword $currkeyword outside a directory context"
+            fi
             ;;
         *)
             fatal "unknown keyword $currkeyword on line $linenumber"
