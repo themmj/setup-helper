@@ -102,6 +102,7 @@ Directory structure of the example:
 │   ├── textfile
 │   └── vimrc
 └── setup-helper
+    ├── README.md
     └── install.sh
 ```  
 
@@ -189,6 +190,7 @@ The resulting environment has the following structure:
     │   ├── textfile
     │   └── vimrc
     └── setup-helper
+        ├── README.md
         └── install.sh
 ```  
 Note that there is no `vim` directory because on OSX it can be installed using brew and will therefore not be cloned. 
