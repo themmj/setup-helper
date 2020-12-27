@@ -23,7 +23,11 @@ log() {
     for (( depth=0; depth < $logdepth; depth++ )); do
         tmp="$padding$tmp"
     done
-    echo "[$1] $tmp"
+    if [ $# -eq 3 ]; then
+        echo "[$1] $tmp" >&2
+    else
+        echo "[$1] $tmp"
+    fi
 }
 
 incrdepth() {
@@ -42,11 +46,11 @@ warn() {
 }
 
 error() {
-    log "ERROR" "$@"
+    log "ERROR" "$@" "x"
 }
 
 fatal() {
-    log "FATAL" "$@"
+    log "FATAL" "$@" "x"
     exit -1
 }
 
