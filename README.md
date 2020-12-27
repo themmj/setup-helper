@@ -2,6 +2,10 @@
 
 A small code generator and runner designed to replicate a formally defined development environment.  
 
+**DISCLAIMER**  
+This is a personal project created in a few days. It is very hacky at times and probably does not conform to any bash coding standards. It may be refactored in the future to be less of an eyesore. But it works, at least in the limited tests that were performed.  
+The generated code is only run if the configuration files are well formed. The only part that can do permanent damage is custom commands and the file copying/linking as it will simply execute `cp` or `ln` respectively. That means if the destination folder contains a file with the same name it will be overwritten.
+
 ## Table of contents  
 
 - [0. Prerequisites](#0-prerequisites)
