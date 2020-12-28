@@ -24,9 +24,9 @@ The generated code is only run if the configuration files are well formed. The o
 This script was designed to have a minimal amount of dependencies.  
 | Dependency | Why?                                                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| `git`      | is needed to clone this repository and to clone repositories defined in the setup.                                |
-| `bash`     | is used to execute the script as sh was too limited.                                                              |  
-| `tr`       | is used to create a random byte sequence from `/dev/urandom`. Maybe this dependency can be removed in the future. |  
+| `git`      | is needed to clone this repository and to clone repositories defined in the setup                                 |
+| `bash`     | is used to execute the script as sh was too limited, currently tested on bash 3 and upwards                       |  
+| `tr`       | is used to create a random byte sequence from `/dev/urandom`. Maybe this dependency can be removed in the future  |  
 
 ## 1. Configuration files  
 
