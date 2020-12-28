@@ -161,6 +161,7 @@ check_path() {
 
 dirstack=
 currdir=
+currenvfile=
 pushdir() {
     currdir=${1%/}
     if [ $# -eq 2 ]; then
@@ -170,6 +171,8 @@ pushdir() {
     fi
     write_to_script_file "mkdir -p $currdir"
     write_to_script_file "cd $currdir"
+    currenvfile="$currdir/.env"
+    write_to_script_file "echo \"\" > \"$currenvfile\""
 }
 popdir() {
     dirstack=${dirstack#* }
@@ -197,7 +200,6 @@ rowvalues=
 iskeyword=
 currkeyword=
 currplatform=
-currenvfile=
 
 # context logic
 coroot="root"
@@ -206,6 +208,45 @@ coapp="app"
 coplatform="platform"
 costack="$coroot "
 currco="$coroot"
+
+# associative arrays were introduced in bash 4
+# this is not nice but it will have to do
+corootkws=""
+codirkws="$kwapps $kwenv $kwfiles $kwrepos $kwsubdirs"
+coappkws="$kwcmd $kwpackages"
+coplatformkws="$kwpkginstall"
+
+iskwvalid=
+validate_keyword() {
+    currkws=
+    iskwvalid=0
+    case "$currco" in
+        "$coroot")
+            currkws="$corootkws"
+            ;;
+        "$codir")
+            currkws="$codirkws"
+            ;;
+        "$coapp")
+            currkws="$coappkws"
+            ;;
+        "$coplatform")
+            currkws="$coplatformkws"
+            ;;
+        *)
+            fatal "unknow context $currco for keyword validation"
+            ;;
+    esac
+    OIFS=$IFS
+    IFS=' '
+    read -ra candidates <<< "$currkws"
+    for candidate in "${candidates[@]}"; do
+        if [ "$currkeyword" == "$candidate" ]; then
+            iskwvalid=1
+        fi
+    done
+    IFS=$OIFS
+}
 
 pushco() {
     currco="$1"
@@ -332,7 +373,7 @@ process_tag() {
                 parentenvfile="$currdir/.env"
                 pushdir "$currdir/$tagname"
                 write_to_script_file "echo \"if [ -f $currdir/.env ]; then\" >> $parentenvfile"
-                write_to_script_file "echo \"source $currdir/.env\" >> $parentenvfile"
+                write_to_script_file "echo \"  source $currdir/.env\" >> $parentenvfile"
                 write_to_script_file "echo \"fi\" >> $parentenvfile"
                 pushco "$codir"
                 ;;
@@ -350,53 +391,10 @@ process_tag() {
 
 process_keyword(){
     debug "processing keyword $currkeyword"
-    case "$currkeyword" in
-        "$kwapps")
-            if [ "$currco" != "$codir" ]; then
-                fatal "cannot use keyword $currkeyword outside a directory context"
-            fi
-            ;;
-        "$kwcmd")
-            if [ "$currco" != "$coapp" ]; then
-                fatal "cannot use keyword $currkeyword outside an app context"
-            fi
-            ;;
-        "$kwenv")
-            if [ "$currco" != "$codir" ]; then
-                fatal "cannot use keyword $currkeyword outside a directory context"
-            fi
-            currenvfile="$currdir/.env"
-            write_to_script_file "echo \"\" > \"$currenvfile\""
-            ;;
-        "$kwfiles")
-            if [ "$currco" != "$codir" ]; then
-                fatal "cannot use keyword $currkeyword outside a directory context"
-            fi
-            ;;
-        "$kwpackages")
-            if [ "$currco" != "$coapp" ]; then
-                fatal "cannot use keyword $currkeyword outside an app context"
-            fi
-            ;;
-        "$kwpkginstall")
-            if [ "$currco" != "$coplatform" ]; then
-                fatal "cannot use keyword $currkeyword outside a platform context"
-            fi
-            ;;
-        "$kwrepos")
-            if [ "$currco" != "$codir" ]; then
-                fatal "cannot use keyword $currkeyword outside a directory context"
-            fi
-            ;;
-        "$kwsubdirs")
-            if [ "$currco" != "$codir" ]; then
-                fatal "cannot use keyword $currkeyword outside a directory context"
-            fi
-            ;;
-        *)
-            fatal "unknown keyword $currkeyword on line $linenumber"
-            ;;
-    esac
+    validate_keyword
+    if [ $iskwvalid -eq 0 ]; then
+        fatal "keyword $currkeyword not allowed in $currco context"
+    fi
 }
 
 process_rowvalues(){
@@ -415,20 +413,21 @@ process_rowvalues(){
         "$kwenv")
             if [ ${#rowvalues[@]} -eq 3 ]; then
                 write_to_script_file "echo \"case \\\":\\\${$arg0}:\\\" in\" >> $currenvfile"
-                write_to_script_file "echo \"*:$arg1:*)\" >> $currenvfile"
-                write_to_script_file "echo \";;\" >> $currenvfile"
-                write_to_script_file "echo \"*)\" >> $currenvfile"
+                write_to_script_file "echo \"  *:$arg1:*)\" >> $currenvfile"
+                write_to_script_file "echo \"    ;;\" >> $currenvfile"
+                write_to_script_file "echo \"  *)\" >> $currenvfile"
                 case "$arg2" in
                     "append")
-                        write_to_script_file "echo \"export $arg0=\\\"\\\$$arg0:$arg1\\\"\" >> $currenvfile"
+                        write_to_script_file "echo \"    export $arg0=\\\"\\\$$arg0:$arg1\\\"\" >> $currenvfile"
                         ;;
                     "prepend")
-                        write_to_script_file "echo \"export $arg0=\\\"$arg1:\\\$$arg0\\\"\" >> $currenvfile"
+                        write_to_script_file "echo \"    export $arg0=\\\"$arg1:\\\$$arg0\\\"\" >> $currenvfile"
                         ;;
                     *)
                         fatal "invalid env option $arg2 on line $linenumber"
                         ;;
                 esac
+                write_to_script_file "echo \"    ;;\" >> $currenvfile"
                 write_to_script_file "echo \"esac\" >> $currenvfile"
             else
                 write_to_script_file "echo \"export $arg0=$arg1\" >> $currenvfile"
