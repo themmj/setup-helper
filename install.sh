@@ -411,6 +411,7 @@ process_rowvalues(){
             fi
             ;;
         "$kwenv")
+            arg1="${arg1/$/\\\$}"
             if [ ${#rowvalues[@]} -eq 3 ]; then
                 write_to_script_file "echo \"case \\\":\\\${$arg0}:\\\" in\" >> $currenvfile"
                 write_to_script_file "echo \"  *:$arg1:*)\" >> $currenvfile"
