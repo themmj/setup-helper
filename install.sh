@@ -457,7 +457,7 @@ process_rowvalues(){
         "$kwrepos")
             repodir="$arg1"
             if [ "$repodir" == "" ]; then
-                gitname="${arg0#*/}"
+                gitname="${arg0##*/}"
                 repodir="${gitname%.git}"
             fi
             if [ -d "$currdir/$repodir" ]; then
