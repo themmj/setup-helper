@@ -1,6 +1,6 @@
 # setup-helper  
 
-A small code generator and runner designed to replicate a formally defined development environment.  
+A small code generator and runner designed to replicate a formally defined development environment. To see a real life use case check out [my personal setup](https://github.com/themmj/personal-setup) created using this helper. 
 
 **DISCLAIMER**  
 This is a personal project created in a few days. It is very hacky at times and probably does not conform to any bash coding standards. It may be refactored in the future to be less of an eyesore. But it works, at least in the limited tests that were performed.  
