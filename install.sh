@@ -10,7 +10,7 @@ TMPDIR=$(mktemp -d -t sh-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX)
 platformfile="platforms"
 setupfile="setup"
 #   platform information
-defaultinstallcmds=()
+defaultinstallcmd=""
 #   default random
 randomdefault=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
 workingdir=$(pwd)
@@ -448,11 +448,13 @@ process_rowvalues(){
             ;;
         "$kwpackages")
             if [ "$arg0" == "$PLATFORM" ] || [ "$arg0" == "all" ]; then
-                write_to_script_file "${defaultinstallcmds[$PLATFORM]} $arg1"
+                write_to_script_file "$defaultinstallcmd $arg1"
             fi
             ;;
         "$kwpkginstall")
-            defaultinstallcmds["$currplatform"]="$arg0"
+            if [ "$currplatform" == "$PLATFORM" ]; then
+                defaultinstallcmd="$arg0"
+            fi
             ;;
         "$kwrepos")
             repodir="$arg1"
@@ -494,7 +496,7 @@ parse_platforms() {
     set_config_file_handle $platformfile
     check_config_file "x"
     process_config_file
-    if [ "${defaultinstallcmds[$PLATFORM]}" == "" ]; then
+    if [ "$defaultinstallcmd" == "" ]; then
         fatal "no default install command for chosen platform provided"
     fi
     decrdepth
